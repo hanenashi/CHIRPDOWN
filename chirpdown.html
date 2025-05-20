@@ -1,0 +1,257 @@
+<!-- Save this file as chirpdown.html (or bird_image_downloader.html) using a text editor like Notepad or VS Code. Ensure no extra characters or code are added. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bird Image Downloader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    textarea, input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    #log {
+      height: 300px;
+      overflow-y: auto;
+      background-color: #f5f5f5;
+      padding: 10px;
+      border: 1px solid #ccc;
+      white-space: pre-wrap;
+    }
+    .image-table img {
+      max-height: 200px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .image-table .image-container {
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+    }
+    .image-table .done .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 255, 0, 0.3);
+      border-radius: 8px;
+    }
+    .image-table th, .image-table td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    .delete-btn {
+      font-size: 12px;
+      padding: 4px 8px;
+      margin-left: 8px;
+    }
+    .image-cell {
+      display: flex;
+      align-items: center;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    .checkbox-label input {
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <h1 class="text-2xl font-bold mb-4">Bird Image Downloader</h1>
+
+  <div class="flex flex-col md:flex-row gap-6">
+    <!-- Left Column: Inputs and Log -->
+    <div class="md:w-2/5">
+      <div class="mb-4">
+        <label for="baseUrl" class="block text-sm font-medium text-gray-700">Base URL:</label>
+        <input type="text" id="baseUrl" class="border rounded" value="https://www.suntory.co.jp/eco/birds/encyclopedia/detail/upload/" />
+      </div>
+
+      <div class="mb-4">
+        <label for="birdList" class="block text-sm font-medium text-gray-700">Bird Names (one per line):</label>
+        <textarea id="birdList" rows="5" class="border rounded">kibitaki
+yamagara
+shijuukara
+koko</textarea>
+      </div>
+
+      <div class="mb-4">
+        <label for="log" class="block text-sm font-medium text-gray-700">Log:</label>
+        <div id="log" class="border rounded"></div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="showErrorsOnly"> Show only errors
+        </label>
+      </div>
+
+      <button onclick="makeFoldersAndLoadImages()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Make Folders and Load Images
+      </button>
+    </div>
+
+    <!-- Right Column: Image Table -->
+    <div class="md:w-3/5">
+      <h2 class="text-xl font-semibold mb-2">Images</h2>
+      <table class="image-table w-full border-collapse">
+        <thead>
+          <tr>
+            <th class="text-sm font-medium text-gray-700">Bird Name</th>
+            <th class="text-sm font-medium text-gray-700">Image</th>
+          </tr>
+        </thead>
+        <tbody id="imageTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // Store all log messages for filtering
+    const logMessages = [];
+
+    function log(message, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' });
+      const color = type === 'error' ? 'red' : 'black';
+      const messageObj = { message: `[${timestamp}] ${message}\n`, type, color };
+      logMessages.push(messageObj);
+
+      // Render logs based on filter
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const logDiv = document.getElementById('log');
+      const showErrorsOnly = document.getElementById('showErrorsOnly').checked;
+      logDiv.innerHTML = '';
+
+      const filteredMessages = showErrorsOnly
+        ? logMessages.filter(msg => msg.type === 'error')
+        : logMessages;
+
+      filteredMessages.forEach(msg => {
+        const span = document.createElement('span');
+        span.style.color = msg.color;
+        span.textContent = msg.message;
+        logDiv.appendChild(span);
+      });
+
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function checkImageExists(url) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          resolve(true);
+          img.remove();
+        };
+        img.onerror = () => {
+          resolve(false);
+          img.remove();
+        };
+        img.src = url;
+        img.style.display = 'none';
+        document.body.appendChild(img);
+      });
+    }
+
+    async function makeFoldersAndLoadImages() {
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+      const birdList = document.getElementById('birdList').value
+        .split('\n')
+        .map(name => name.trim())
+        .filter(name => name);
+      const tableBody = document.getElementById('imageTableBody');
+
+      // Clear table and logs
+      tableBody.innerHTML = '';
+      logMessages.length = 0;
+      renderLogs();
+
+      log(`Starting process for ${birdList.length} birds...`);
+      log('Consider using a consistent root folder (e.g., C:\\BirdImages) for easier directory selection.');
+
+      // Request directory access
+      let dirHandle;
+      try {
+        log('Requesting directory access...');
+        dirHandle = await window.showDirectoryPicker({
+          id: 'birdImagesDir',
+          mode: 'readwrite'
+        });
+        log(`Selected directory: ${dirHandle.name} (navigate here to save images)`);
+      } catch (e) {
+        log(`Error accessing directory: ${e.message}`, 'error');
+        return;
+      }
+
+      for (const bird of birdList) {
+        try {
+          const url = `${baseUrl}${bird}.avif`;
+
+          // Check if image exists
+          log(`Checking if ${bird}.avif exists...`);
+          const imageExists = await checkImageExists(url);
+          if (!imageExists) {
+            log(`${bird}.avif does not exist, skipping`, 'error');
+            continue;
+          }
+
+          // Create subfolder for each bird
+          log(`Creating directory for ${bird}...`);
+          const birdDirHandle = await dirHandle.getDirectoryHandle(bird, { create: true });
+
+          // Add image to table
+          log(`Loading image for ${bird}...`);
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${bird}</td>
+            <td class="image-cell">
+              <div class="image-container">
+                <img src="${url}" alt="${bird}" title="Right-click to save ${bird}.avif to the '${bird}' folder in '${dirHandle.name}'">
+                <div class="overlay" style="display: none;"></div>
+              </div>
+              <button class="delete-btn bg-red-500 hover:bg-red-700 text-white rounded" onclick="this.closest('tr').remove()">Delete</button>
+            </td>
+          `;
+          tableBody.appendChild(row);
+
+          // Add click event for green overlay
+          const imgContainer = row.querySelector('.image-container');
+          const overlay = imgContainer.querySelector('.overlay');
+          imgContainer.addEventListener('click', () => {
+            const isDone = imgContainer.classList.toggle('done');
+            overlay.style.display = isDone ? 'block' : 'none';
+            console.log(isDone ? `Added overlay for ${bird}` : `Removed overlay for ${bird}`);
+          });
+
+          log(`Image loaded for ${bird}. Right-click to save it.`);
+
+          // Short delay to avoid overwhelming the browser
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (e) {
+          log(`Error processing ${bird}: ${e.message}`, 'error');
+        }
+      }
+
+      log('Process completed! Right-click images in the table to save them to the created folders. Left-click to toggle done status.');
+    }
+
+    // Add checkbox event listener
+    document.getElementById('showErrorsOnly').addEventListener('change', renderLogs);
+  </script>
+</body>
+</html>
