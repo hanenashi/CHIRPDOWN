@@ -26,17 +26,46 @@
       border: 1px solid #ccc;
       white-space: pre-wrap;
     }
-    .image-table img {
+    .row {
+      display: flex;
+      align-items: center;
+      padding: 10px 0;
+      gap: 20px;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid #ddd;
+      margin: 10px 0;
+      width: 100%;
+    }
+    .bird-name {
+      width: 20%;
+      text-align: left;
+    }
+    .image-container {
+      width: 40%;
+      text-align: left;
+    }
+    .image-container img {
       max-height: 200px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
-    .image-table .image-container, .image-table .audio-container {
+    .audio-container {
+      width: 20%;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .delete-container {
+      width: 20%;
+      text-align: left;
+    }
+    .image-container, .audio-container {
       position: relative;
-      display: inline-block;
       cursor: pointer;
     }
-    .image-table .done .overlay {
+    .done .overlay {
       position: absolute;
       top: 0;
       left: 0;
@@ -45,21 +74,10 @@
       background-color: rgba(0, 255, 0, 0.3);
       border-radius: 8px;
     }
-    .image-table th, .image-table td {
-      padding: 10px;
-      text-align: left;
-      border-bottom: 1px solid #ddd;
-      vertical-align: middle;
-    }
     .delete-btn {
       font-size: 12px;
       padding: 4px 8px;
-      margin-left: 8px;
-    }
-    .media-cell {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      margin-left: 10px;
     }
     .checkbox-label {
       display: flex;
@@ -78,6 +96,9 @@
       text-decoration: none;
       color: white;
       background-color: #6b7280; /* Tailwind gray-500 */
+      margin-right: 8px;
+      min-width: 24px;
+      text-align: center;
     }
     .audio-link:hover {
       background-color: #4b5563; /* Tailwind gray-700 */
@@ -121,20 +142,10 @@ koko</textarea>
       </button>
     </div>
 
-    <!-- Right Column: Image Table -->
+    <!-- Right Column: Image List -->
     <div class="md:w-3/5">
       <h2 class="text-xl font-semibold mb-2">Images</h2>
-      <table class="image-table w-full border-collapse">
-        <thead>
-          <tr>
-            <th class="text-sm font-medium text-gray-700">Bird Name</th>
-            <th class="text-sm font-medium text-gray-700">Image</th>
-            <th class="text-sm font-medium text-gray-700">MP3</th>
-            <th class="text-sm font-medium text-gray-700">Delete</th>
-          </tr>
-        </thead>
-        <tbody id="imageTableBody"></tbody>
-      </table>
+      <div id="imageContainer"></div>
     </div>
   </div>
 
@@ -205,6 +216,29 @@ koko</textarea>
       });
     }
 
+    function addOverlayEvents(bird, imageContainer, audioLinks, mp3Results) {
+      // Image overlay
+      const imgOverlay = imageContainer.querySelector('.overlay');
+      imageContainer.addEventListener('click', () => {
+        const isDone = imageContainer.classList.toggle('done');
+        imgOverlay.style.display = isDone ? 'block' : 'none';
+        console.log(isDone ? `Added overlay for ${bird} image` : `Removed overlay for ${bird} image`);
+      });
+
+      // MP3 overlays
+      audioLinks.forEach((link, index) => {
+        const container = link.parentElement;
+        const overlay = container.querySelector('.overlay');
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const isDone = container.classList.toggle('done');
+          overlay.style.display = isDone ? 'block' : 'none';
+          const mp3Type = mp3Results[index].type;
+          console.log(isDone ? `Added overlay for ${bird}${mp3Type}.mp3` : `Removed overlay for ${bird}${mp3Type}.mp3`);
+        });
+      });
+    }
+
     async function makeFoldersAndLoadImages() {
       const baseUrl = document.getElementById('baseUrl').value.trim();
       const mp3BaseUrl = document.getElementById('mp3BaseUrl').value.trim();
@@ -212,10 +246,10 @@ koko</textarea>
         .split('\n')
         .map(name => name.trim())
         .filter(name => name);
-      const tableBody = document.getElementById('imageTableBody');
+      const imageContainer = document.getElementById('imageContainer');
 
-      // Clear table and logs
-      tableBody.innerHTML = '';
+      // Clear container and logs
+      imageContainer.innerHTML = '';
       logMessages.length = 0;
       renderLogs();
 
@@ -236,7 +270,8 @@ koko</textarea>
         return;
       }
 
-      for (const bird of birdList) {
+      for (let i = 0; i < birdList.length; i++) {
+        const bird = birdList[i];
         try {
           // Check image
           const imageUrl = `${baseUrl}${bird}.avif`;
@@ -268,54 +303,87 @@ koko</textarea>
           log(`Creating directory for ${bird}...`);
           const birdDirHandle = await dirHandle.getDirectoryHandle(bird, { create: true });
 
-          // Add row to table
+          // Create row
           log(`Loading media for ${bird}...`);
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${bird}</td>
-            <td class="media-cell">
-              <div class="image-container">
-                <img src="${imageUrl}" alt="${bird}" title="Right-click to save ${bird}.avif to the '${bird}' folder in '${dirHandle.name}'">
-                <div class="overlay" style="display: none;"></div>
-              </div>
-            </td>
-            <td class="media-cell">
-              ${mp3Results.map(({ type, url }) => `
-                <div class="audio-container">
-                  <a class="audio-link" href="${url}" download="${bird}${type}.mp3" title="Right-click to save ${bird}${type}.mp3 to the '${bird}' folder in '${dirHandle.name}'">
-                    ${type === '_s' ? 'S' : type === '_ch' ? 'Ch' : 'C'}
-                  </a>
-                  <div class="overlay" style="display: none;"></div>
-                </div>
-              `).join('')}
-            </td>
-            <td class="media-cell">
-              <button class="delete-btn bg-red-500 hover:bg-red-700 text-white rounded" onclick="this.closest('tr').remove()">Delete</button>
-            </td>
-          `;
-          tableBody.appendChild(row);
+          const row = document.createElement('div');
+          row.className = 'row';
 
-          // Add click event for image overlay
-          const imgContainer = row.querySelector('.image-container');
-          const imgOverlay = imgContainer.querySelector('.overlay');
-          imgContainer.addEventListener('click', () => {
-            const isDone = imgContainer.classList.toggle('done');
-            imgOverlay.style.display = isDone ? 'block' : 'none';
-            console.log(isDone ? `Added overlay for ${bird} image` : `Removed overlay for ${bird} image`);
+          // Bird Name
+          const nameDiv = document.createElement('div');
+          nameDiv.className = 'bird-name';
+          nameDiv.textContent = bird;
+          row.appendChild(nameDiv);
+          console.log(`Name div for ${bird}:`, nameDiv.outerHTML);
+
+          // Image
+          const imageDiv = document.createElement('div');
+          imageDiv.className = 'image-container';
+          const img = document.createElement('img');
+          img.src = imageUrl;
+          img.alt = bird;
+          img.title = `Right-click to save ${bird}.avif to the '${bird}' folder in '${dirHandle.name}'`;
+          const imgOverlay = document.createElement('div');
+          imgOverlay.className = 'overlay';
+          imgOverlay.style.display = 'none';
+          imageDiv.appendChild(img);
+          imageDiv.appendChild(imgOverlay);
+          row.appendChild(imageDiv);
+          console.log(`Image div for ${bird}:`, imageDiv.outerHTML);
+
+          // MP3
+          const mp3Div = document.createElement('div');
+          mp3Div.className = 'audio-container';
+          const audioLinks = [];
+          mp3Results.forEach(({ type, url }) => {
+            const audioContainer = document.createElement('div');
+            audioContainer.className = 'audio-link-container';
+            const audioLink = document.createElement('a');
+            audioLink.className = 'audio-link';
+            audioLink.href = url;
+            audioLink.download = `${bird}${type}.mp3`;
+            audioLink.title = `Right-click to save ${bird}${type}.mp3 to the '${bird}' folder in '${dirHandle.name}'`;
+            audioLink.textContent = type === '_s' ? 'S' : type === '_ch' ? 'Ch' : 'C';
+            const audioOverlay = document.createElement('div');
+            audioOverlay.className = 'overlay';
+            audioOverlay.style.display = 'none';
+            audioContainer.appendChild(audioLink);
+            audioContainer.appendChild(audioOverlay);
+            mp3Div.appendChild(audioContainer);
+            audioLinks.push(audioLink);
+          });
+          row.appendChild(mp3Div);
+          console.log(`MP3 div for ${bird}:`, mp3Div.outerHTML);
+          console.log(`MP3 div CSS: display=${getComputedStyle(mp3Div).display}, gap=${getComputedStyle(mp3Div).gap}`);
+          audioLinks.forEach(link => {
+            console.log(`Audio link CSS: margin-right=${getComputedStyle(link).marginRight}, min-width=${getComputedStyle(link).minWidth}`);
           });
 
-          // Add click events for MP3 overlays
-          row.querySelectorAll('.audio-container').forEach((container, index) => {
-            const overlay = container.querySelector('.overlay');
-            container.addEventListener('click', (e) => {
-              // Prevent click from triggering download
-              e.preventDefault();
-              const isDone = container.classList.toggle('done');
-              overlay.style.display = isDone ? 'block' : 'none';
-              const mp3Type = mp3Results[index].type;
-              console.log(isDone ? `Added overlay for ${bird}${mp3Type}.mp3` : `Removed overlay for ${bird}${mp3Type}.mp3`);
-            });
-          });
+          // Delete
+          const deleteDiv = document.createElement('div');
+          deleteDiv.className = 'delete-container';
+          const deleteButton = document.createElement('button');
+          deleteButton.className = 'delete-btn bg-red-500 hover:bg-red-700 text-white rounded';
+          deleteButton.textContent = 'Delete';
+          deleteButton.onclick = () => {
+            row.nextElementSibling?.remove(); // Remove hr if it exists
+            row.remove();
+          };
+          deleteDiv.appendChild(deleteButton);
+          row.appendChild(deleteDiv);
+          console.log(`Delete div for ${bird}:`, deleteDiv.outerHTML);
+
+          imageContainer.appendChild(row);
+          console.log(`Full row for ${bird}:`, row.outerHTML);
+
+          // Add separator (except for last bird)
+          if (i < birdList.length - 1) {
+            const hr = document.createElement('hr');
+            imageContainer.appendChild(hr);
+            console.log(`Separator for ${bird}:`, hr.outerHTML);
+          }
+
+          // Add overlay events
+          addOverlayEvents(bird, imageDiv, audioLinks, mp3Results);
 
           log(`Media loaded for ${bird}. Right-click image and MP3 links to save.`);
 
@@ -326,7 +394,7 @@ koko</textarea>
         }
       }
 
-      log('Process completed! Right-click images and MP3 links in the table to save them to the created folders. Left-click to toggle done status.');
+      log('Process completed! Right-click images and MP3 links to save them to the created folders. Left-click to toggle done status.');
     }
 
     // Add checkbox event listener
